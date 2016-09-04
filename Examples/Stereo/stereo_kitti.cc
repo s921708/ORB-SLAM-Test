@@ -31,8 +31,12 @@
 
 using namespace std;
 
+extern void (*logKeys)(std::vector<cv::KeyPoint> &, long unsigned int);
+
 void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
                 vector<string> &vstrImageRight, vector<double> &vTimestamps);
+
+void testLogKeys(std::vector<cv::KeyPoint> &vKeys, long unsigned int id);
 
 int main(int argc, char **argv)
 {
@@ -41,6 +45,8 @@ int main(int argc, char **argv)
         cerr << endl << "Usage: ./stereo_kitti path_to_vocabulary path_to_settings path_to_sequence" << endl;
         return 1;
     }
+
+    logKeys = testLogKeys;
 
     // Retrieve paths to images
     vector<string> vstrImageLeft;
@@ -161,4 +167,20 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
         vstrImageLeft[i] = strPrefixLeft + ss.str() + ".png";
         vstrImageRight[i] = strPrefixRight + ss.str() + ".png";
     }
+}
+
+void testLogKeys(std::vector<cv::KeyPoint> &vKeys, long unsigned int id)
+{
+    ofstream fLogs;
+    string strPath = "/tmp/logKeys.txt";
+    int size = vKeys.size();
+
+    fLogs.open(strPath.c_str(), ios_base::out | ios_base::app);
+    fLogs << id << " " << size << endl;
+
+    for (int i = 0; i < size; i++) {
+        fLogs << "    " << vKeys[i].pt.x << " " << vKeys[i].pt.y << std::endl;
+    }
+
+    fLogs.close();
 }

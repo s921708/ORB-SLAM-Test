@@ -23,6 +23,8 @@
 #include "ORBmatcher.h"
 #include <thread>
 
+void (*logKeys)(std::vector<cv::KeyPoint> &, long unsigned int) = NULL;
+
 namespace ORB_SLAM2
 {
 
@@ -112,6 +114,10 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
     }
 
     mb = mbf/fx;
+
+    if (logKeys) {
+        logKeys(mvKeys, mnId);
+    }
 
     AssignFeaturesToGrid();
 }
