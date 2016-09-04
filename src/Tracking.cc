@@ -37,6 +37,7 @@
 
 #include<mutex>
 
+void (*logKFs)(ORB_SLAM2::KeyFrame *, long unsigned int) = NULL;
 
 using namespace std;
 
@@ -1143,6 +1144,10 @@ void Tracking::CreateNewKeyFrame()
                     break;
             }
         }
+    }
+
+    if (logKFs) {
+        logKFs(pKF, mCurrentFrame.mnId);
     }
 
     mpLocalMapper->InsertKeyFrame(pKF);

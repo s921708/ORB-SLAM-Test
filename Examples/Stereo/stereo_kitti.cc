@@ -32,11 +32,18 @@
 using namespace std;
 
 extern void (*logKeys)(std::vector<cv::KeyPoint> &, long unsigned int);
+extern void (*logKFs)(ORB_SLAM2::KeyFrame *, long unsigned int);
 
 void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
                 vector<string> &vstrImageRight, vector<double> &vTimestamps);
 
+// hook function for logging keys from every frames
 void testLogKeys(std::vector<cv::KeyPoint> &vKeys, long unsigned int id);
+ofstream fLogKeys;
+
+// hook function for logging keys from every key frames
+void testLogKFs(ORB_SLAM2::KeyFrame *pKF, long unsigned int id);
+ofstream fLogKFs;
 
 int main(int argc, char **argv)
 {
@@ -46,7 +53,13 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    // init log file for keys from every frames
     logKeys = testLogKeys;
+    fLogKeys.open("/tmp/logKeys.txt", ios_base::out | ios_base::app);
+
+    // init log file for keys from every key frames
+    logKFs = testLogKFs;
+    fLogKFs.open("/tmp/logKFs.txt", ios_base::out | ios_base::app);
 
     // Retrieve paths to images
     vector<string> vstrImageLeft;
@@ -130,6 +143,9 @@ int main(int argc, char **argv)
     // Save camera trajectory
     SLAM.SaveTrajectoryKITTI("CameraTrajectory.txt");
 
+    fLogKeys.close();
+    fLogKFs.close();
+
     return 0;
 }
 
@@ -171,16 +187,23 @@ void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
 
 void testLogKeys(std::vector<cv::KeyPoint> &vKeys, long unsigned int id)
 {
-    ofstream fLogs;
-    string strPath = "/tmp/logKeys.txt";
     int size = vKeys.size();
 
-    fLogs.open(strPath.c_str(), ios_base::out | ios_base::app);
-    fLogs << id << " " << size << endl;
+    fLogKeys << id << " " << size << endl;
 
     for (int i = 0; i < size; i++) {
-        fLogs << "    " << vKeys[i].pt.x << " " << vKeys[i].pt.y << std::endl;
+        fLogKeys << "    " << vKeys[i].pt.x << " " << vKeys[i].pt.y << std::endl;
     }
+}
 
-    fLogs.close();
+void testLogKFs(ORB_SLAM2::KeyFrame *pKF, long unsigned int id)
+{
+    int size = pKF->N;
+    const std::vector<cv::KeyPoint> &vKeys = pKF->mvKeys;
+
+    fLogKFs << id << " " << pKF->mnId << " " << size << endl;
+
+    for (int i = 0; i < size; i++) {
+        fLogKFs << "    " << vKeys[i].pt.x << " " << vKeys[i].pt.y << std::endl;
+    }
 }
