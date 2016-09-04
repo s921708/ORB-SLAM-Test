@@ -32,7 +32,8 @@
 using namespace std;
 
 extern void (*logKeys)(std::vector<cv::KeyPoint> &, long unsigned int);
-extern void (*logKFs)(ORB_SLAM2::KeyFrame *, long unsigned int);
+extern void (*logKFs)(ORB_SLAM2::KeyFrame *);
+extern void (*logMapPts)(ORB_SLAM2::MapPoint *);
 
 void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
                 vector<string> &vstrImageRight, vector<double> &vTimestamps);
@@ -42,8 +43,12 @@ void testLogKeys(std::vector<cv::KeyPoint> &vKeys, long unsigned int id);
 ofstream fLogKeys;
 
 // hook function for logging keys from every key frames
-void testLogKFs(ORB_SLAM2::KeyFrame *pKF, long unsigned int id);
+void testLogKFs(ORB_SLAM2::KeyFrame *pKF);
 ofstream fLogKFs;
+
+// hook function for logging all map points
+void testLogMapPts(ORB_SLAM2::MapPoint *pMapPt);
+ofstream fLogMapPts;
 
 int main(int argc, char **argv)
 {
@@ -55,11 +60,15 @@ int main(int argc, char **argv)
 
     // init log file for keys from every frames
     logKeys = testLogKeys;
-    fLogKeys.open("/tmp/logKeys.txt", ios_base::out | ios_base::app);
+    fLogKeys.open("/tmp/logKeys.txt", ios_base::out);
 
     // init log file for keys from every key frames
     logKFs = testLogKFs;
-    fLogKFs.open("/tmp/logKFs.txt", ios_base::out | ios_base::app);
+    fLogKFs.open("/tmp/logKFs.txt", ios_base::out);
+
+    // init log file for all map points
+    logMapPts = testLogMapPts;
+    fLogMapPts.open("/tmp/logMapPts.txt", ios_base::out);
 
     // Retrieve paths to images
     vector<string> vstrImageLeft;
@@ -145,6 +154,7 @@ int main(int argc, char **argv)
 
     fLogKeys.close();
     fLogKFs.close();
+    fLogMapPts.close();
 
     return 0;
 }
@@ -196,14 +206,22 @@ void testLogKeys(std::vector<cv::KeyPoint> &vKeys, long unsigned int id)
     }
 }
 
-void testLogKFs(ORB_SLAM2::KeyFrame *pKF, long unsigned int id)
+void testLogKFs(ORB_SLAM2::KeyFrame *pKF)
 {
     int size = pKF->N;
     const std::vector<cv::KeyPoint> &vKeys = pKF->mvKeys;
 
-    fLogKFs << id << " " << pKF->mnId << " " << size << endl;
+    fLogKFs << pKF->mnFrameId << " " << pKF->mnId << " " << size << endl;
 
     for (int i = 0; i < size; i++) {
         fLogKFs << "    " << vKeys[i].pt.x << " " << vKeys[i].pt.y << std::endl;
     }
+}
+
+void testLogMapPts(ORB_SLAM2::MapPoint *pMapPt)
+{
+    ORB_SLAM2::KeyFrame *pKF = pMapPt->GetReferenceKeyFrame();
+    int id = pMapPt->GetIndexInKeyFrame(pKF);
+
+    fLogMapPts << pMapPt->mnId << " " << pKF->mnFrameId << " " << pKF->mnId << " " << id << std::endl;
 }

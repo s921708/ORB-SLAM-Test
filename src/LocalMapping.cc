@@ -25,6 +25,8 @@
 
 #include<mutex>
 
+extern void (*logMapPts)(ORB_SLAM2::MapPoint *);
+
 namespace ORB_SLAM2
 {
 
@@ -445,6 +447,10 @@ void LocalMapping::CreateNewMapPoints()
 
             mpMap->AddMapPoint(pMP);
             mlpRecentAddedMapPoints.push_back(pMP);
+
+            if (logMapPts) {
+                logMapPts(pMP);
+            }
 
             nnew++;
         }

@@ -37,7 +37,8 @@
 
 #include<mutex>
 
-void (*logKFs)(ORB_SLAM2::KeyFrame *, long unsigned int) = NULL;
+void (*logKFs)(ORB_SLAM2::KeyFrame *) = NULL;
+void (*logMapPts)(ORB_SLAM2::MapPoint *) = NULL;
 
 using namespace std;
 
@@ -535,6 +536,10 @@ void Tracking::StereoInitialization()
                 mpMap->AddMapPoint(pNewMP);
 
                 mCurrentFrame.mvpMapPoints[i]=pNewMP;
+
+                if (logMapPts) {
+                    logMapPts(pNewMP);
+                }
             }
         }
 
@@ -1133,6 +1138,11 @@ void Tracking::CreateNewKeyFrame()
                     mpMap->AddMapPoint(pNewMP);
 
                     mCurrentFrame.mvpMapPoints[i]=pNewMP;
+
+                    if (logMapPts) {
+                        logMapPts(pNewMP);
+                    }
+
                     nPoints++;
                 }
                 else
@@ -1146,16 +1156,16 @@ void Tracking::CreateNewKeyFrame()
         }
     }
 
-    if (logKFs) {
-        logKFs(pKF, mCurrentFrame.mnId);
-    }
-
     mpLocalMapper->InsertKeyFrame(pKF);
 
     mpLocalMapper->SetNotStop(false);
 
     mnLastKeyFrameId = mCurrentFrame.mnId;
     mpLastKeyFrame = pKF;
+
+    if (logKFs) {
+        logKFs(pKF);
+    }
 }
 
 void Tracking::SearchLocalPoints()
