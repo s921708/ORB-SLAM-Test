@@ -31,6 +31,8 @@
 #include<mutex>
 #include<thread>
 
+bool (*insertLoopDetection)(std::list<ORB_SLAM2::KeyFrame*> &, std::mutex &) = NULL;
+void (*logLoopObs)(ORB_SLAM2::KeyFrame *, ORB_SLAM2::KeyFrame *, std::vector<ORB_SLAM2::MapPoint*> &, cv::Mat &) = NULL;
 
 namespace ORB_SLAM2
 {
@@ -64,6 +66,11 @@ void LoopClosing::Run()
         // Check if there are keyframes in the queue
         if(CheckNewKeyFrames())
         {
+            if (insertLoopDetection && insertLoopDetection(mlpLoopKeyFrameQueue, mMutexLoopQueue))
+            {
+                CorrectLoop();
+            }
+
             // Detect loop candidates and check covisibility consistency
             if(DetectLoop())
             {
@@ -336,6 +343,11 @@ bool LoopClosing::ComputeSim3()
                     mScw = Converter::toCvMat(mg2oScw);
 
                     mvpCurrentMatchedPoints = vpMapPointMatches;
+
+                    if (logLoopObs) {
+                        logLoopObs(mpCurrentKF, mpMatchedKF, mvpCurrentMatchedPoints, mScw);
+                    }
+
                     break;
                 }
             }

@@ -34,6 +34,7 @@ using namespace std;
 extern void (*logKeys)(std::vector<cv::KeyPoint> &, long unsigned int);
 extern void (*logKFs)(ORB_SLAM2::KeyFrame *);
 extern void (*logMapPts)(ORB_SLAM2::MapPoint *);
+extern void (*logLoopObs)(ORB_SLAM2::KeyFrame *, ORB_SLAM2::KeyFrame *, std::vector<ORB_SLAM2::MapPoint*> &, cv::Mat &);
 
 void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
                 vector<string> &vstrImageRight, vector<double> &vTimestamps);
@@ -49,6 +50,10 @@ ofstream fLogKFs;
 // hook function for logging all map points
 void testLogMapPts(ORB_SLAM2::MapPoint *pMapPt);
 ofstream fLogMapPts;
+
+// hook function for logging all map points
+void testlogLoopObs(ORB_SLAM2::KeyFrame *pCurrentKF, ORB_SLAM2::KeyFrame *pMatchedKF, std::vector<ORB_SLAM2::MapPoint*> &vMatchedPts, cv::Mat &mScw);
+ofstream fLogLoopObs;
 
 int main(int argc, char **argv)
 {
@@ -69,6 +74,10 @@ int main(int argc, char **argv)
     // init log file for all map points
     logMapPts = testLogMapPts;
     fLogMapPts.open("/tmp/logMapPts.txt", ios_base::out);
+
+    // init log file for loop observations
+    logLoopObs = testlogLoopObs;
+    fLogLoopObs.open("/tmp/logLoopObs.txt", ios_base::out);
 
     // Retrieve paths to images
     vector<string> vstrImageLeft;
@@ -224,4 +233,35 @@ void testLogMapPts(ORB_SLAM2::MapPoint *pMapPt)
     int id = pMapPt->GetIndexInKeyFrame(pKF);
 
     fLogMapPts << pMapPt->mnId << " " << pKF->mnFrameId << " " << pKF->mnId << " " << id << std::endl;
+}
+
+void testlogLoopObs(ORB_SLAM2::KeyFrame *pCurrentKF, ORB_SLAM2::KeyFrame *pMatchedKF, std::vector<ORB_SLAM2::MapPoint*> &vMatchedPts, cv::Mat &mScw)
+{
+    int matchedSize = vMatchedPts.size();
+    int rows = mScw.rows;
+    int cols = mScw.cols;
+    std::vector<ORB_SLAM2::MapPoint*> vMatched;
+    std::vector<int> vIdx;
+
+    for (int i = 0; i < matchedSize; i++) {
+        if (vMatchedPts[i]) {
+            vMatched.push_back(vMatchedPts[i]);
+            vIdx.push_back(i);
+        }
+    }
+    matchedSize = vMatched.size();
+
+    fLogLoopObs << pCurrentKF->mnFrameId << " " << pCurrentKF->mnId << " " << pMatchedKF->mnFrameId << " " << pMatchedKF->mnId << std::endl;
+    for (int i = 0; i < rows; i++) {
+        for (int j = 0; j < cols; j++) {
+            fLogLoopObs << mScw.at<float>(i*cols+j) << " ";
+        }
+        fLogLoopObs << std::endl;
+    }
+    fLogLoopObs << matchedSize << std::endl;
+    for (int i = 0; i < matchedSize; i++) {
+        int idxM = vMatched[i]->GetIndexInKeyFrame(pMatchedKF);
+        fLogLoopObs << "    " << pCurrentKF->mvKeysUn[vIdx[i]].pt.x << " " << pCurrentKF->mvKeysUn[vIdx[i]].pt.y << " to " << pMatchedKF->mvKeysUn[idxM].pt.x << " " << pMatchedKF->mvKeysUn[idxM].pt.y << std::endl;
+    }
+
 }
