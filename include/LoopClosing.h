@@ -80,8 +80,6 @@ public:
 
     bool isFinished();
 
-protected:
-
     bool CheckNewKeyFrames();
 
     bool DetectLoop();

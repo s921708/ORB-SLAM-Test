@@ -35,6 +35,10 @@
 #include "KeyFrameDatabase.h"
 #include "ORBVocabulary.h"
 #include "Viewer.h"
+#include "ORBmatcher.h"
+#include "PnPsolver.h"
+#include "Sim3Solver.h"
+#include "Converter.h"
 
 namespace ORB_SLAM2
 {

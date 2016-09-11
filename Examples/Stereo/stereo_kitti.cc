@@ -18,6 +18,9 @@
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
 
+#include<sys/types.h>
+#include<sys/stat.h>
+#include<unistd.h>
 
 #include<iostream>
 #include<algorithm>
@@ -29,12 +32,16 @@
 
 #include<System.h>
 
+#define MATCHING_PAIR_THRESHOLD 5
+
 using namespace std;
 
 extern void (*logKeys)(std::vector<cv::KeyPoint> &, long unsigned int);
 extern void (*logKFs)(ORB_SLAM2::KeyFrame *);
 extern void (*logMapPts)(ORB_SLAM2::MapPoint *);
 extern void (*logLoopObs)(ORB_SLAM2::KeyFrame *, ORB_SLAM2::KeyFrame *, std::vector<ORB_SLAM2::MapPoint*> &, cv::Mat &);
+extern bool (*isInstLoop)(ORB_SLAM2::LoopClosing *);
+extern bool (*insLoopObs)(ORB_SLAM2::LoopClosing *);
 
 void LoadImages(const string &strPathToSequence, vector<string> &vstrImageLeft,
                 vector<string> &vstrImageRight, vector<double> &vTimestamps);
@@ -54,6 +61,13 @@ ofstream fLogMapPts;
 // hook function for logging all map points
 void testlogLoopObs(ORB_SLAM2::KeyFrame *pCurrentKF, ORB_SLAM2::KeyFrame *pMatchedKF, std::vector<ORB_SLAM2::MapPoint*> &vMatchedPts, cv::Mat &mScw);
 ofstream fLogLoopObs;
+
+// hook function for inserting loop detection
+bool testIsInsLoop(ORB_SLAM2::LoopClosing *pLoopClosing);
+char szLoopObsFileName[32] = {0};
+
+// hook function for inserting loop detection
+bool testInsLoopObs(ORB_SLAM2::LoopClosing *pLoopClosing);
 
 int main(int argc, char **argv)
 {
@@ -78,6 +92,9 @@ int main(int argc, char **argv)
     // init log file for loop observations
     logLoopObs = testlogLoopObs;
     fLogLoopObs.open("/tmp/logLoopObs.txt", ios_base::out);
+
+    isInstLoop = testIsInsLoop;
+    insLoopObs = testInsLoopObs;
 
     // Retrieve paths to images
     vector<string> vstrImageLeft;
@@ -264,4 +281,126 @@ void testlogLoopObs(ORB_SLAM2::KeyFrame *pCurrentKF, ORB_SLAM2::KeyFrame *pMatch
         fLogLoopObs << "    " << pCurrentKF->mvKeysUn[vIdx[i]].pt.x << " " << pCurrentKF->mvKeysUn[vIdx[i]].pt.y << " to " << pMatchedKF->mvKeysUn[idxM].pt.x << " " << pMatchedKF->mvKeysUn[idxM].pt.y << std::endl;
     }
 
+}
+
+bool testIsInsLoop(ORB_SLAM2::LoopClosing *pLoopClosing)
+{
+    struct stat buffer;
+    sprintf(szLoopObsFileName, "/tmp/%lu.txt", pLoopClosing->mpCurrentKF->mnFrameId);
+    return (stat (szLoopObsFileName, &buffer) == 0);
+}
+
+bool testInsLoopObs(ORB_SLAM2::LoopClosing *pLoopClosing)
+{
+    ORB_SLAM2::KeyFrame* pCurrentKF = pLoopClosing->mpCurrentKF;
+    ORB_SLAM2::KeyFrame* pMatchedKF = NULL;
+    unsigned long currentFrameId = pCurrentKF->mnFrameId;
+    unsigned long matchedFrameId = 0;
+    int matchedSize = 0, nInitialCandidates = 0, nInliers = 0;
+    vector<ORB_SLAM2::MapPoint*> vpMapPoints1, vpMapPointMatches;
+    ORB_SLAM2::ORBmatcher matcher(0.75,true);
+    ORB_SLAM2::Sim3Solver *pSolver = NULL;
+    cv::Mat R, t;
+    float s;
+    g2o::Sim3 gScm, gSmw;
+    bool found = false;
+    ifstream fGetLoopObs;
+
+    if (!testIsInsLoop(pLoopClosing)) return false;
+
+    fGetLoopObs.open(szLoopObsFileName);
+
+    {
+        stringstream ss;
+        string s;
+
+        getline(fGetLoopObs,s);
+        ss << s;
+        ss >> matchedFrameId;
+        ss >> matchedSize;
+    }
+
+    nInitialCandidates = pLoopClosing->mvpEnoughConsistentCandidates.size();
+
+    for(int i=0; i<nInitialCandidates; i++)
+    {
+        ORB_SLAM2::KeyFrame* pKF = pLoopClosing->mvpEnoughConsistentCandidates[i];
+        if (pKF->mnFrameId == matchedFrameId) {
+            pMatchedKF = pKF;
+            break;
+        }
+    }
+
+    if (!pMatchedKF) {
+        printf("The matched frame[%lu] of current frame[%lu] is not in the candidates with enough consistent.\n",
+               matchedFrameId, currentFrameId);
+        goto END;
+    }
+
+    vpMapPoints1 = pCurrentKF->GetMapPointMatches();
+    vpMapPointMatches = vector<ORB_SLAM2::MapPoint*>(vpMapPoints1.size(),static_cast<ORB_SLAM2::MapPoint*>(NULL));
+
+    for (int i = 0; i < matchedSize; i++) {
+        stringstream ss;
+        string s;
+        cv::KeyPoint p1, p2;
+        int idxCPF = -1, idxMPF = -1;
+        int nKey1 = (int)pCurrentKF->mvKeys.size();
+        int nKey2 = (int)pMatchedKF->mvKeys.size();
+
+        getline(fGetLoopObs,s);
+        ss << s;
+        ss >> p1.pt.x;
+        ss >> p1.pt.y;
+        ss >> p2.pt.x;
+        ss >> p2.pt.y;
+
+        for (int j = 0; j < nKey1; j++) {
+            if (1 > cv::norm(pCurrentKF->mvKeys[j].pt-p1.pt)) {
+                idxCPF = j;
+                break;
+            }
+        }
+
+        for (int j = 0; j < nKey2; j++) {
+            if (1 > cv::norm(pMatchedKF->mvKeys[j].pt-p2.pt)) {
+                idxMPF = j;
+                break;
+            }
+        }
+
+        if (0 > idxCPF || 0 > idxMPF) {
+            continue;
+        }
+
+        vpMapPointMatches[idxCPF] = pMatchedKF->GetMapPoint(idxMPF);
+        nInliers++;
+    }
+
+    pSolver = new ORB_SLAM2::Sim3Solver(pCurrentKF,pMatchedKF,vpMapPointMatches,pLoopClosing->mbFixScale);
+    pSolver->SetRansacParameters(0.99,20,300);
+
+    R = pSolver->GetEstimatedRotation();
+    t = pSolver->GetEstimatedTranslation();
+    s = pSolver->GetEstimatedScale();
+    matcher.SearchBySim3(pCurrentKF,pMatchedKF,vpMapPointMatches,s,R,t,7.5);
+
+    gScm = g2o::Sim3(ORB_SLAM2::Converter::toMatrix3d(R),ORB_SLAM2::Converter::toVector3d(t),s);
+    gSmw = g2o::Sim3(ORB_SLAM2::Converter::toMatrix3d(pMatchedKF->GetRotation()),ORB_SLAM2::Converter::toVector3d(pMatchedKF->GetTranslation()),1.0);
+    pLoopClosing->mg2oScw = gScm*gSmw;
+    pLoopClosing->mScw = ORB_SLAM2::Converter::toCvMat(pLoopClosing->mg2oScw);
+
+    pLoopClosing->mvpCurrentMatchedPoints = vpMapPointMatches;
+
+    if (MATCHING_PAIR_THRESHOLD > nInliers) {
+        printf("The matching pair[%d] is less than threshold[%d]\n",
+               nInliers, MATCHING_PAIR_THRESHOLD);
+        goto END;
+    }
+
+    found = true;
+
+END:
+    fGetLoopObs.close();
+    return found;
 }

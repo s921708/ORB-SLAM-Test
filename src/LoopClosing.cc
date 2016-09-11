@@ -31,7 +31,8 @@
 #include<mutex>
 #include<thread>
 
-bool (*insertLoopDetection)(std::list<ORB_SLAM2::KeyFrame*> &, std::mutex &) = NULL;
+bool (*isInstLoop)(ORB_SLAM2::LoopClosing *) = NULL;
+bool (*insLoopObs)(ORB_SLAM2::LoopClosing *) = NULL;
 void (*logLoopObs)(ORB_SLAM2::KeyFrame *, ORB_SLAM2::KeyFrame *, std::vector<ORB_SLAM2::MapPoint*> &, cv::Mat &) = NULL;
 
 namespace ORB_SLAM2
@@ -66,11 +67,6 @@ void LoopClosing::Run()
         // Check if there are keyframes in the queue
         if(CheckNewKeyFrames())
         {
-            if (insertLoopDetection && insertLoopDetection(mlpLoopKeyFrameQueue, mMutexLoopQueue))
-            {
-                CorrectLoop();
-            }
-
             // Detect loop candidates and check covisibility consistency
             if(DetectLoop())
             {
@@ -222,7 +218,11 @@ bool LoopClosing::DetectLoop()
     // Add Current Keyframe to database
     mpKeyFrameDB->add(mpCurrentKF);
 
-    if(mvpEnoughConsistentCandidates.empty())
+    if (isInstLoop && isInstLoop(this))
+    {
+        return true;
+    }
+    else if(mvpEnoughConsistentCandidates.empty())
     {
         mpCurrentKF->SetErase();
         return false;
@@ -257,6 +257,12 @@ bool LoopClosing::ComputeSim3()
 
     int nCandidates=0; //candidates with enough matches
 
+    bool bMatch = false;
+
+    if (insLoopObs && insLoopObs(this)) {
+        goto STEP2;
+    }
+
     for(int i=0; i<nInitialCandidates; i++)
     {
         KeyFrame* pKF = mvpEnoughConsistentCandidates[i];
@@ -286,8 +292,6 @@ bool LoopClosing::ComputeSim3()
 
         nCandidates++;
     }
-
-    bool bMatch = false;
 
     // Perform alternatively RANSAC iterations for each candidate
     // until one is succesful or all fail
@@ -361,6 +365,8 @@ bool LoopClosing::ComputeSim3()
         mpCurrentKF->SetErase();
         return false;
     }
+
+STEP2:
 
     // Retrieve MapPoints seen in Loop Keyframe and neighbors
     vector<KeyFrame*> vpLoopConnectedKFs = mpMatchedKF->GetVectorCovisibleKeyFrames();
